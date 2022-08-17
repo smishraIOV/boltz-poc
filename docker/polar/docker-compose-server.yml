@@ -1,0 +1,12 @@
+version: '3.3'
+services:
+  boltz-poc-server:
+    image: boltz-poc-server:latest
+    container_name: boltz-poc-server
+    depends_on:
+      rskj:
+        condition: service_healthy
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./config-server.json:/server/config.json

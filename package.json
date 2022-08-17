@@ -3,22 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@apollo/client": "^3.5.6",
-    "@graphprotocol/graph-cli": "^0.21.1",
-    "@graphprotocol/graph-ts": "^0.20.0",
-    "apollo-server": "^3.5.0",
-    "dotenv": "^8.2.0",
-    "ethers": "^5.5.1",
-    "ethjs-query": "^0.3.8",
-    "graphql": "^16.1.0",
-    "graphql-tag": "^2.10.1",
-    "web3": "^1.6.0"
+  },
+  "devDependencies": {
   },
   "scripts": {
-    "start":"npm run docker:start && npm run docker:connect",
-    "stop":"npm run docker:stop && ./docker/polar/clean.sh",
-    "docker:start": "docker compose -f docker/polar/docker-compose-polar.yml -f docker/polar/docker-compose-rsk.yml -f docker/polar/docker-compose-boltz.yml up -d",
-    "docker:stop": "docker compose -f docker/polar/docker-compose-polar.yml -f docker/polar/docker-compose-rsk.yml -f docker/polar/docker-compose-boltz.yml down",
+    "dev": "cd server && go build -o ./server && ./server",
+    "build": "cd server && go build -o ./server",
+    "start": "npm run docker:rskj:start && cd server && sleep 30 && go build -o ./server && ./server",
+    "stop": "npm run docker:server:stop",
+    "lint": "next lint",
+    "docker:build": "docker build -t boltz-poc-server:latest .",
+    "docker:start": "npm run docker:compose:start && npm run docker:connect",
+    "docker:stop": "npm run docker:compose:stop && ./docker/polar/clean.sh",
+    "docker:rskj:start": "docker compose -f docker/polar/docker-compose-rsk.yml up -d",
+    "docker:rskj:stop": "docker compose -f docker/polar/docker-compose-rsk.yml down",
+    "docker:server:start": "docker compose -f docker/polar/docker-compose-rsk.yml -f docker/polar/docker-compose-server.yml up -d",
+    "docker:server:stop": "docker compose -f docker/polar/docker-compose-rsk.yml -f docker/polar/docker-compose-server.yml down",
+    "docker:compose:start": "docker compose -f docker/polar/docker-compose-server.yml -f docker/polar/docker-compose-polar.yml -f docker/polar/docker-compose-rsk.yml -f docker/polar/docker-compose-boltz.yml up -d",
+    "docker:compose:stop": "docker compose -f docker/polar/docker-compose-server.yml -f docker/polar/docker-compose-polar.yml -f docker/polar/docker-compose-rsk.yml -f docker/polar/docker-compose-boltz.yml down",
     "docker:connect": "./docker/polar/connect.sh"
   }
 }
