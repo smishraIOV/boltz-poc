@@ -1,0 +1,12 @@
+version: '3.3'
+services:
+  rskj:
+    image: rskj:latest
+    container_name: RSK-Node
+    ports:
+      - '4444:4444'
+      - '4445:4445'
+    volumes:
+      - ./data/rskj/database:/root/.rsk/regtest/database
+      - ./data/rskj/local/node.conf:/usr/local/rskj/node.conf
+      - ./data/rskj/local/logback.xml:/usr/local/rskj/logback.xml

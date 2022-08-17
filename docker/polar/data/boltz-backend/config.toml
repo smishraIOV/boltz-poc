@@ -1,6 +1,20 @@
 # Initial config based on boton deployment (should be reproducible, for same RSKJ pvt key)
 # contents copied over initially from docs/regtest
 
+# This is the REST API that should be exposed to the public
+# It does not support HTTPS but only plaintext HTTP. A reverse
+# proxy should be setup with a web server like Nginx
+[api]
+host = "0.0.0.0"
+#port = 9_001
+
+# And this the gRPC API that is used by the boltz-cli executable
+#[grpc]
+#host = "127.0.0.1"
+#port = 9_000
+#certpath = "/home/boltz/.boltz/tls.cert"
+#keypath = "/home/boltz/.boltz/tls.key"
+
 
 [[pairs]]
 base = "BTC"

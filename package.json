@@ -15,5 +15,10 @@
     "web3": "^1.6.0"
   },
   "scripts": {
+    "start":"npm run docker:start && npm run docker:connect",
+    "stop":"npm run docker:stop && ./docker/polar/clean.sh",
+    "docker:start": "docker compose -f docker/polar/docker-compose-polar.yml -f docker/polar/docker-compose-rsk.yml -f docker/polar/docker-compose-boltz.yml up -d",
+    "docker:stop": "docker compose -f docker/polar/docker-compose-polar.yml -f docker/polar/docker-compose-rsk.yml -f docker/polar/docker-compose-boltz.yml down",
+    "docker:connect": "./docker/polar/connect.sh"
   }
 }

@@ -1,0 +1,57 @@
+version: '3.3'
+services:
+  boltz-backend:
+    image: boltz/backend:latest
+    container_name: boltz-backend
+    environment:
+      USERID: ${USERID:-1000}
+      GROUPID: ${GROUPID:-1000}
+    ports:
+      - '9001:9001'
+    volumes:
+      - ./data/boltz-backend/config.toml:/boltz-backend/config.toml
+      - ./data/boltz-backend/hardhat.config.ts:/boltz-backend/hardhat.config.ts
+      - ./data/boltz-backend/home/otpSecret.dat:/root/.boltz/otpSecret.dat
+      - ./data/boltz-backend/home/otpUri.txt:/root/.boltz/otpUri.txt
+      - ./data/boltz-backend/home/seed.dat:/root/.boltz/seed.dat
+      - ./volumes/bitcoind/backend1/regtest/.cookie:/boltz-backend/nodes/btc/.bitcoin-cookie
+      - ./volumes/lnd/alice/tls.cert:/boltz-backend/nodes/lnd/certificates/tls.cert
+      - ./volumes/lnd/alice/data/chain/bitcoin/regtest/admin.macaroon:/boltz-backend/nodes/lnd/macaroons/admin.macaroon
+    depends_on:
+      boltz-backend-setup:
+        condition: service_healthy
+  boltz-backend-setup:
+    image: boltz/backend:latest
+    container_name: boltz-backend-SETUP
+    restart: "no"
+    depends_on:
+      rskj:
+        condition: service_healthy
+      alice:
+        condition: service_started
+      bob:
+        condition: service_started
+      carol:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "ls"]
+      interval: 20s
+      timeout: 5s
+      start_period: 140s
+    volumes:
+      - ./data/boltz-backend/config.toml:/boltz-backend/config.toml
+      - ./data/boltz-backend/hardhat.config.ts:/boltz-backend/hardhat.config.ts
+      - ./data/boltz-backend/home/otpSecret.dat:/root/.boltz/otpSecret.dat
+      - ./data/boltz-backend/home/otpUri.txt:/root/.boltz/otpUri.txt
+      - ./data/boltz-backend/home/seed.dat:/root/.boltz/seed.dat
+    entrypoint: [ "bash", "-c", "cd /boltz-backend && npm run docker:rskj:deploy && /boltz-backend/bin/boltz-ethereum send 1000000000000 '0xABf0E4a3aB8628CAC2D0539679233B607c3c6f42' --provider http://host.docker.internal:4444 && /boltz-backend/bin/boltz-ethereum send 1000000000000 '0xABf0E4a3aB8628CAC2D0539679233B607c3c6f42' --token --provider http://host.docker.internal:4444 && sleep infinity"]
+  rskj:
+    image: rskj:latest
+    container_name: RSK-Node
+    ports:
+      - '4444:4444'
+      - '4445:4445'
+    volumes:
+      - ./data/rskj/database:/root/.rsk/regtest/database
+      - ./data/rskj/local/node.conf:/usr/local/rskj/node.conf
+      - ./data/rskj/local/logback.xml:/usr/local/rskj/logback.xml

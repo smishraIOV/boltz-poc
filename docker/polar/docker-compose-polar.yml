@@ -1,0 +1,128 @@
+version: '3.3'
+services:
+  backend1:
+    image: polarlightning/bitcoind:0.21.1
+    container_name: polar-n1-backend1
+    environment:
+      USERID: ${USERID:-1000}
+      GROUPID: ${GROUPID:-1000}
+    hostname: backend1
+    command: >-
+      bitcoind -server=1 -regtest=1
+      -rpcauth=polaruser:5e5e98c21f5c814568f8b55d83b23c1c$$066b03f92df30b11de8e4b1b1cd5b1b4281aa25205bd57df9be82caf97a05526
+      -debug=1 -zmqpubrawblock=tcp://0.0.0.0:28334
+      -zmqpubrawtx=tcp://0.0.0.0:28335 -txindex=1 -dnsseed=0 -upnp=0
+      -rpcbind=0.0.0.0 -rpcallowip=0.0.0.0/0 -rpcport=18443 -rest -listen=1
+      -listenonion=0 -fallbackfee=0.0002
+      && sleep 30000
+    volumes:
+      - ./volumes/bitcoind/backend1:/home/bitcoin/.bitcoin
+    expose:
+      - '18443'
+      - '18444'
+      - '28334'
+      - '28335'
+    ports:
+      - '18445:18443'
+      - '19444:18444'
+      - '28334:28334'
+      - '29335:28335'
+  alice:
+    image: polarlightning/lnd:0.14.3-beta
+    container_name: polar-n1-alice
+    environment:
+      USERID: ${USERID:-1000}
+      GROUPID: ${GROUPID:-1000}
+    hostname: alice
+    depends_on:
+      backend1:
+        condition: service_started
+      bob:
+        condition: service_started
+      carol:
+        condition: service_started
+    command: >-
+      lnd --noseedbackup --trickledelay=5000 --alias=alice --externalip=alice --debuglevel=trace
+      --tlsextradomain=alice --tlsextradomain=polar-n1-alice --tlsextradomain=host.docker.internal
+      --listen=0.0.0.0:9735 --rpclisten=0.0.0.0:10009 --restlisten=0.0.0.0:8080
+      --bitcoin.active --bitcoin.regtest --bitcoin.node=bitcoind
+      --bitcoind.rpchost=polar-n1-backend1 --bitcoind.rpcuser=polaruser
+      --bitcoind.rpcpass=polarpass
+      --bitcoind.zmqpubrawblock=tcp://backend1:28334
+      --bitcoind.zmqpubrawtx=tcp://backend1:28335
+      && while true; do if lncli --network=regtest getinfo 2>&1; then; break; fi; sleep 1; done;
+    restart: always
+    volumes:
+      - ./volumes/lnd/alice:/home/lnd/.lnd
+    expose:
+      - '8080'
+      - '10009'
+      - '9735'
+    ports:
+      - '8082:8080'
+      - '10001:10009'
+      - '9735:9735'
+  bob:
+    image: polarlightning/lnd:0.14.3-beta
+    container_name: polar-n1-bob
+    environment:
+      USERID: ${USERID:-1000}
+      GROUPID: ${GROUPID:-1000}
+    hostname: bob
+    depends_on:
+      backend1:
+        condition: service_started
+      carol:
+        condition: service_started
+    command: >-
+      lnd --noseedbackup --trickledelay=5000 --alias=bob --externalip=bob
+      --tlsextradomain=bob --tlsextradomain=polar-n1-bob  --tlsextradomain=host.docker.internal --listen=0.0.0.0:9735
+      --rpclisten=0.0.0.0:10009 --restlisten=0.0.0.0:8080 --bitcoin.active
+      --bitcoin.regtest --bitcoin.node=bitcoind
+      --bitcoind.rpchost=polar-n1-backend1 --bitcoind.rpcuser=polaruser
+      --bitcoind.rpcpass=polarpass
+      --bitcoind.zmqpubrawblock=tcp://polar-n1-backend1:28334
+      --bitcoind.zmqpubrawtx=tcp://polar-n1-backend1:28335
+      && while true; do if lncli --network=regtest getinfo 2>&1; then; break; fi; sleep 1; done;
+    restart: always
+    volumes:
+      - ./volumes/lnd/bob:/home/lnd/.lnd
+    expose:
+      - '8080'
+      - '10009'
+      - '9735'
+    ports:
+      - '8083:8080'
+      - '10002:10009'
+      - '9739:9735'
+  carol:
+    image: polarlightning/lnd:0.14.3-beta
+    container_name: polar-n1-carol
+    environment:
+      USERID: ${USERID:-1000}
+      GROUPID: ${GROUPID:-1000}
+    hostname: carol
+    depends_on:
+      backend1:
+        condition: service_started
+    command: >-
+      lnd --noseedbackup --trickledelay=5000 --alias=carol --externalip=carol
+      --tlsextradomain=carol --tlsextradomain=polar-n1-carol --tlsextradomain=host.docker.internal
+      --listen=0.0.0.0:9735 --rpclisten=0.0.0.0:10009 --restlisten=0.0.0.0:8080
+      --bitcoin.active --bitcoin.regtest --bitcoin.node=bitcoind
+      --bitcoind.rpchost=polar-n1-backend1 --bitcoind.rpcuser=polaruser
+      --bitcoind.rpcpass=polarpass
+      --bitcoind.zmqpubrawblock=tcp://polar-n1-backend1:28334
+      --bitcoind.zmqpubrawtx=tcp://polar-n1-backend1:28335
+      && while true; do if lncli --network=regtest getinfo 2>&1; then; break; fi; sleep 1; done;
+    restart: always
+    volumes:
+      - ./volumes/lnd/carol:/home/lnd/.lnd
+    expose:
+      - '8080'
+      - '10009'
+      - '9735'
+    ports:
+      - '8084:8080'
+      - '10003:10009'
+      - '9740:9735'
