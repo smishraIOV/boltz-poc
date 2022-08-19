@@ -17,4 +17,7 @@ type config struct {
 		Endpoint string
 		ChainId  *big.Int
 	}
+	Boltz struct {
+		Endpoint string
+	}
 }

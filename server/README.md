@@ -1,4 +1,4 @@
 
-go mod dowload
+go mod tidy
 
 go build -o ./server

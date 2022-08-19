@@ -23,27 +23,30 @@ const (
 )
 
 type Server struct {
-	srv http.Server
-	rsk connectors.RSKConnector
-	db  storage.DBConnector
-	now func() time.Time
+	srv   http.Server
+	boltz connectors.BoltzConnector
+	rsk   connectors.RSKConnector
+	db    storage.DBConnector
+	now   func() time.Time
 }
 
-func New(rsk connectors.RSKConnector, db storage.DBConnector) Server {
-	return newServer(rsk, db, time.Now)
+func New(boltz connectors.BoltzConnector, rsk connectors.RSKConnector, db storage.DBConnector) Server {
+	return newServer(boltz, rsk, db, time.Now)
 }
 
-func newServer(rsk connectors.RSKConnector, db storage.DBConnector, now func() time.Time) Server {
+func newServer(boltz connectors.BoltzConnector, rsk connectors.RSKConnector, db storage.DBConnector, now func() time.Time) Server {
 	return Server{
-		rsk: rsk,
-		db:  db,
-		now: now,
+		boltz: boltz,
+		rsk:   rsk,
+		db:    db,
+		now:   now,
 	}
 }
 
 func (s *Server) Start(port uint) error {
 	r := mux.NewRouter()
 	r.Path("/health").Methods(http.MethodGet).HandlerFunc(s.checkHealthHandler)
+	r.Path("/swapinfo").Methods(http.MethodGet).HandlerFunc(s.getSwapInfo)
 	w := log.StandardLogger().WriterLevel(log.DebugLevel)
 	h := handlers.LoggingHandler(w, r)
 	defer func(w *io.PipeWriter) {
@@ -105,6 +108,22 @@ func (s *Server) checkHealthHandler(w http.ResponseWriter, _ *http.Request) {
 		},
 	}
 	err := enc.Encode(response)
+	if err != nil {
+		log.Error("error encoding response: ", err.Error())
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) getSwapInfo(w http.ResponseWriter, _ *http.Request) {
+	info, err := s.boltz.GetReverseSwapInfo()
+	if err != nil {
+		log.Error("error boltz response: ", err.Error())
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(w)
+	err = enc.Encode(info)
 	if err != nil {
 		log.Error("error encoding response: ", err.Error())
 		http.Error(w, "internal server error", http.StatusInternalServerError)

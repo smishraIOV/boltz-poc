@@ -15,5 +15,8 @@
     "rsk": {
         "endpoint": "http://localhost:4444",
         "chainId": 33
+    },
+    "boltz": {
+        "endpoint": "http://localhost:9001"
     }
 }

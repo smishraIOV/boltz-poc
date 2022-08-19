@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/patogallaiov/boltz-poc/connectors"
 	"github.com/patogallaiov/boltz-poc/http"
 	"github.com/patogallaiov/boltz-poc/storage"
@@ -44,10 +45,10 @@ func initLogger() {
 	}
 }
 
-func startServer(rsk *connectors.RSK, db *storage.DB) {
+func startServer(boltz *connectors.Boltz, rsk *connectors.RSK, db *storage.DB) {
 
-	srv = http.New(rsk, db)
-	log.Debug("registering local provider (this might take a while)")
+	srv = http.New(boltz, rsk, db)
+	log.Debug("registering server (this might take a while)")
 	port := cfg.Server.Port
 
 	if port == 0 {
@@ -67,14 +68,16 @@ func main() {
 	initLogger()
 	rand.Seed(time.Now().UnixNano())
 
-	log.Info("starting liquidity provider server")
+	log.Info("starting boltz-poc server")
 	log.Debugf("loaded config %+v", cfg)
 
+	// INIT DB
 	db, err := storage.Connect(cfg.DB.Path)
 	if err != nil {
 		log.Fatal("error connecting to DB: ", err)
 	}
 
+	// INIT RSK
 	rsk, err := connectors.NewRSK(cfg.ErpKeys)
 	if err != nil {
 		log.Fatal("RSK error: ", err)
@@ -85,10 +88,22 @@ func main() {
 		log.Fatal("error connecting to RSK: ", err)
 	}
 
+	// INIT Boltz
+	boltz, err := connectors.NewBoltz(cfg.Boltz.Endpoint, &chaincfg.SimNetParams)
+	if err != nil {
+		log.Fatal("Boltz error: ", err)
+	}
+
+	info, errBoltz := boltz.GetReverseSwapInfo()
+	if errBoltz != nil {
+		log.Fatal("error GetReverseSwapInfo to Boltz: ", errBoltz)
+	}
+	log.Debugf("Verified connection to Boltz GetReverseSwapInfo -> %+v", info)
+
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
-	startServer(rsk, db)
+	startServer(boltz, rsk, db)
 
 	<-done
 

@@ -15,5 +15,8 @@
     "rsk": {
         "endpoint": "http://host.docker.internal:4444",
         "chainId": 33
+    },
+    "boltz": {
+        "endpoint": "http://host.docker.internal:9001"
     }
 }
