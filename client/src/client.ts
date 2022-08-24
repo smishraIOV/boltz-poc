@@ -5,7 +5,7 @@ export default class BoltzPocClient {
         const request = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ amount: 2345 })
+            body: JSON.stringify({ amount: 23450 })
         };
         return fetch('http://localhost:8080/payment', request)
             .then(response => response.json())

@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
 
+	"github.com/ethereum/go-ethereum/core/types"
 	gethTypes "github.com/ethereum/go-ethereum/core/types"
 
 	"math/big"
@@ -37,6 +38,7 @@ const (
 type RSKConnector interface {
 	Connect(endpoint string, chainId *big.Int) error
 	CheckConnection() error
+	Subscribe([]common.Address, func(gethTypes.Log)) error
 	Close()
 	GetChainId() (*big.Int, error)
 	EstimateGas(addr string, value *big.Int, data []byte) (uint64, error)
@@ -102,6 +104,44 @@ func (rsk *RSK) Connect(endpoint string, chainId *big.Int) error {
 		return fmt.Errorf("chain id mismatch; expected chain id: %v, rsk node chain id: %v", chainId, rskChainId)
 	}
 	return nil
+}
+
+func (rsk *RSK) Subscribe(addresses []common.Address, callback func(log gethTypes.Log)) error {
+
+	query := ethereum.FilterQuery{
+		Addresses: addresses,
+	}
+
+	//Log Channel
+	logs := make(chan types.Log)
+
+	//Subscribe
+	sub, err := rsk.c.SubscribeFilterLogs(context.Background(), query, logs)
+	if err != nil {
+		return err
+	}
+
+	// Leave a thread pooling
+	go poolSubscription(sub, logs, callback)
+
+	return nil
+}
+
+func poolSubscription(sub ethereum.Subscription, logs chan gethTypes.Log, callback func(log gethTypes.Log)) {
+	for {
+		select {
+		case err := <-sub.Err():
+			log.Fatalf("Error in subscription %v.", err)
+		case vLog := <-logs:
+			if callback == nil {
+				log.Debug("Event received:")
+				log.Debugln(vLog) // pointer to event log
+				log.Error("Event received but no callback declared.")
+			} else {
+				go callback(vLog)
+			}
+		}
+	}
 }
 
 func (rsk *RSK) CheckConnection() error {

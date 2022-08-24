@@ -4,17 +4,25 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"strings"
+
+	"os"
 
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
+	gethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
+	"github.com/patogallaiov/boltz-poc/config"
+	log "github.com/sirupsen/logrus"
 )
 
 const ()
@@ -22,6 +30,7 @@ const ()
 const (
 	getNodesEndpoint             = "/getnodes"
 	getPairsEndpoint             = "/getpairs"
+	getContractsEndpoint         = "/getcontracts"
 	createSwapEndpoint           = "/createswap"
 	routingHintsEndpoint         = "/routinghints"
 	swapStatusEndpoint           = "/swapstatus"
@@ -32,7 +41,9 @@ const (
 var ErrSwapNotFound = errors.New("transaction not in mempool or settled/canceled")
 
 type BoltzConnector interface {
+	Initialize() error
 	GetPair() (PairResponse, error)
+	GetContracts() (ContractsResponse, error)
 	GetReverseSwapInfo() (*ReverseSwapInfo, error)
 	NewReverseSwap(pairId string, orderSide string, amt btcutil.Amount, feesHash string, routingNode []byte) (*ReverseSwap, error)
 	CheckTransaction(transactionHex, lockupAddress string, amt int64) (string, error)
@@ -46,22 +57,76 @@ type BoltzConnector interface {
 type Boltz struct {
 	rest         *RestClient
 	apiURL       string
+	abiPath      string
 	chain        *chaincfg.Params
 	claimAddress string
+	rsk          RSKConnector
 }
 
-func NewBoltz(apiURL string, chain *chaincfg.Params, claimAddress string) (*Boltz, error) {
-	rest, _ := NewRestClient(apiURL)
+func NewBoltz(appCfg config.Config, chain *chaincfg.Params, claimAddress string, rsk RSKConnector) (*Boltz, error) {
+	rest, _ := NewRestClient(appCfg.Boltz.Endpoint)
 	return &Boltz{
 		rest,
-		apiURL,
+		appCfg.Boltz.Endpoint,
+		appCfg.Boltz.AbiPath,
 		chain,
 		claimAddress,
+		rsk,
 	}, nil
+}
+func (boltz *Boltz) Initialize() error {
+	// Check endpoint
+	if _, err := boltz.GetReverseSwapInfo(); err != nil {
+		return err
+	}
+
+	// Subscribe to RSK events
+	contracts, err := boltz.GetContracts()
+	if err != nil {
+		return err
+	}
+	etherSwapAddress := common.HexToAddress(contracts.Ethereum.SwapContracts.EtherSwap)
+	erc20SwapAddress := common.HexToAddress(contracts.Ethereum.SwapContracts.ERC20Swap)
+
+	boltz.rsk.Subscribe([]common.Address{etherSwapAddress, erc20SwapAddress}, boltz.receiveEvent)
+	return nil
+}
+
+func (boltz *Boltz) receiveEvent(elog gethTypes.Log) {
+	log.Debugf("[BOLTZ-client] - Event received -> %v", elog)
+	pwd, _ := os.Getwd()
+	abiFile, errFile := ioutil.ReadFile(pwd + boltz.abiPath)
+	if errFile != nil {
+		log.Fatalf("Error reading abi file: %v", errFile)
+		return
+	}
+	contractAbi, err := abi.JSON(strings.NewReader(string(abiFile)))
+	if err != nil {
+		log.Fatalf("Error decoding abi: %v", err)
+		return
+	}
+	event := map[string]interface{}{}
+	err = contractAbi.UnpackIntoMap(event, "Lockup", elog.Data)
+	if err != nil {
+		log.Fatalf("Error decoding event: %v", err)
+		return
+	}
+
+	log.Debug(event)
+	log.Debugf("Lockup claimAddress: %s", event["claimAddress"])
+	preimageHash := elog.Topics[1].Hex()
+
+	log.Debugf("Lockup preimageHash: %s", preimageHash)
+
 }
 
 func (boltz *Boltz) GetPair() (response PairResponse, err error) {
 	err = boltz.rest.Get(getPairsEndpoint, &response)
+	return
+}
+
+func (boltz *Boltz) GetContracts() (response ContractsResponse, err error) {
+	err = boltz.rest.Get(getContractsEndpoint, &response)
 	return
 }
 
@@ -330,19 +395,6 @@ func (boltz *Boltz) createReverseSwap(pairId string, orderSide string, amt int64
 	}
 
 	return &response, nil
-}
-
-func (boltz *Boltz) checkHeight(h int64, hs string) string {
-	b1, err := hex.DecodeString(hs)
-	if err != nil {
-		return ""
-	}
-	b := make([]byte, 8)
-	copy(b, b1)
-	if binary.LittleEndian.Uint64(b) == uint64(h) {
-		return hs
-	}
-	return ""
 }
 
 func (boltz *Boltz) addressWitnessScriptHash(script []byte, net *chaincfg.Params) (*btcutil.AddressWitnessScriptHash, error) {

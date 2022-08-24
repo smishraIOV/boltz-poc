@@ -13,11 +13,12 @@
         "path": "server.db"
     },
     "rsk": {
-        "endpoint": "http://localhost:4444",
+        "endpoint": "ws://localhost:4445/websocket",
         "chainId": 33
     },
     "boltz": {
-        "endpoint": "http://localhost:9001"
+        "endpoint": "http://localhost:9001",
+        "abiPath": "/abi/EtherSwap.json"
     },
     "accounts": {
         "rsk": {

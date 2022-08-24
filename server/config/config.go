@@ -1,8 +1,8 @@
-package main
+package config
 
 import "math/big"
 
-type config struct {
+type Config struct {
 	LogFile string
 	Debug   bool
 	ErpKeys []string
@@ -19,6 +19,7 @@ type config struct {
 	}
 	Boltz struct {
 		Endpoint string
+		AbiPath  string
 	}
 	Accounts struct {
 		RSK struct {

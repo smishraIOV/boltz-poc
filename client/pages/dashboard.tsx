@@ -27,7 +27,6 @@ const Dashboard: NextPage = () => {
   }, [])
 
   if (isLoading) return <p>Loading...</p>
-  if (!data) return <p>No profile data</p>
 
   return (
     <div className={styles.container}>
@@ -54,6 +53,9 @@ const Dashboard: NextPage = () => {
                   Sats
                 </th>
                 <th>
+                  Preimage
+                </th>
+                <th>
                   Hash
                 </th>
               </tr>
@@ -65,17 +67,18 @@ const Dashboard: NextPage = () => {
                   return <tr key={todo.PreimageHash}>
                       <td>{i} </td>
                       <td>{todo.Amount} </td>
+                      <td>{todo.Preimage}</td>
                       <td>{todo.PreimageHash}</td>
                   </tr>
                 })
               ) : (
                 <tr>
-                  No payments yet.
+                  <td colSpan={4}>No payments yet.</td> 
                 </tr>
               )
             ) : (
               <tr>
-                Loading...
+                <td colSpan={4}>No payments yet.</td> 
               </tr>
             )}
             </tbody>

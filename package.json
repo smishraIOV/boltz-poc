@@ -7,9 +7,10 @@
   "devDependencies": {
   },
   "scripts": {
-    "dev": "cd server && go build -o ./server && ./server",
+    "server": "cd server && go build -o ./server && ./server",
+    "client": "cd client && npm run dev",
     "build": "cd server && go build -o ./server",
-    "start": "npm run docker:rskj:start && cd server && sleep 30 && go build -o ./server && ./server",
+    "start": "npm run docker:dev:start && cd server && sleep 30 && go build -o ./server && ./server",
     "stop": "npm run docker:dev:stop",
     "lint": "next lint",
     "docker:build": "docker build -t boltz-poc-server:latest .",

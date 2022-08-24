@@ -70,6 +70,21 @@ type PairResponse struct {
 	} `json:"pairs"`
 }
 
+type ContractsResponse struct {
+	Ethereum struct {
+		Network struct {
+			ChainId int8 `json:"chainId"`
+		} `json:"network"`
+		SwapContracts struct {
+			EtherSwap string `json:"EtherSwap"`
+			ERC20Swap string `json:"ERC20Swap"`
+		} `json:"swapContracts"`
+		Tokens struct {
+			DOC string `json:"DOC"`
+		} `json:"tokens"`
+	}
+}
+
 type RoutingHint struct {
 	HopHintsList []struct {
 		NodeID                    string `json:"nodeId"`

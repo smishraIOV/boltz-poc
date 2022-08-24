@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/patogallaiov/boltz-poc/config"
 	"github.com/patogallaiov/boltz-poc/connectors"
 	"github.com/patogallaiov/boltz-poc/http"
 	"github.com/patogallaiov/boltz-poc/services"
@@ -18,7 +19,7 @@ import (
 )
 
 var (
-	cfg config
+	cfg config.Config
 	srv http.Server
 )
 
@@ -90,16 +91,17 @@ func main() {
 	}
 
 	// INIT Boltz
-	boltz, err := connectors.NewBoltz(cfg.Boltz.Endpoint, &chaincfg.SimNetParams, cfg.Accounts.RSK.Address)
+	log.Debugln("Initializing Boltz client...")
+	boltz, err := connectors.NewBoltz(cfg, &chaincfg.SimNetParams, cfg.Accounts.RSK.Address, rsk)
 	if err != nil {
 		log.Fatal("Boltz error: ", err)
 	}
 
-	info, errBoltz := boltz.GetReverseSwapInfo()
-	if errBoltz != nil {
-		log.Fatal("error GetReverseSwapInfo to Boltz: ", errBoltz)
+	err = boltz.Initialize()
+	if err != nil {
+		log.Fatal("error GetReverseSwapInfo to Boltz: ", err)
 	}
-	log.Debugf("Verified connection to Boltz GetReverseSwapInfo -> %+v", info)
+	log.Debugln("Initialized Boltz client.")
 
 	// INIT Checkout
 	checkout := services.NewCheckoutService(boltz, db)
