@@ -13,6 +13,7 @@
     "start": "npm run docker:dev:start && cd server && sleep 30 && go build -o ./server && ./server",
     "stop": "npm run docker:dev:stop",
     "lint": "next lint",
+    "docker:volumes:reset": "cd docker/polar/ && rm -rf volumes && tar -xvf volumes.tgz && rm -rf data/rskj/database",
     "docker:build": "docker build -t boltz-poc-server:latest .",
     "docker:start": "npm run docker:dev:start && npm run docker:connect",
     "docker:stop": "npm run docker:dev:stop && ./docker/polar/clean.sh",
