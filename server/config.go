@@ -20,4 +20,10 @@ type config struct {
 	Boltz struct {
 		Endpoint string
 	}
+	Accounts struct {
+		RSK struct {
+			PrivateKey string
+			Address    string
+		}
+	}
 }

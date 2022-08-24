@@ -13,6 +13,8 @@ const (
 type DBConnector interface {
 	CheckConnection() error
 	Close() error
+	SavePayment(payment *Payment) error
+	GetPayments() (result []*Payment, err error)
 }
 
 type DB struct {
@@ -27,6 +29,10 @@ func Connect(dbPath string) (*DB, error) {
 	log.Debug("connecting to DB: ", dbPath)
 	db, err := sqlx.Connect(driver, dbPath)
 	if err != nil {
+		return nil, err
+	}
+
+	if _, err := db.Exec(createPaymentTable); err != nil {
 		return nil, err
 	}
 

@@ -6,18 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-	"strings"
 
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
-	"github.com/lightningnetwork/lnd/input"
 	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
 )
 
@@ -35,95 +31,8 @@ const (
 
 var ErrSwapNotFound = errors.New("transaction not in mempool or settled/canceled")
 
-type BadRequestError string
-
-func (e *BadRequestError) Error() string {
-	return string(*e)
-}
-
-type boltzReverseSwap struct {
-	ID                 string `json:"id"`
-	Invoice            string `json:"invoice"`
-	RedeemScript       string `json:"redeemScript"`
-	LockupAddress      string `json:"lockupAddress"`
-	OnchainAmount      int64  `json:"onchainAmount"`
-	TimeoutBlockHeight int64  `json:"timeoutBlockHeight"`
-}
-
-type ReverseSwap struct {
-	boltzReverseSwap
-	Preimage string
-	Key      string
-}
-
-type Fees struct {
-	Percentage float64
-	Lockup     int64
-	Claim      int64
-}
-
-type ReverseSwapInfo struct {
-	FeesHash string
-	Max      int64
-	Min      int64
-	Fees     Fees
-}
-
-type PairResponse struct {
-	Warnings []string `json:"warnings"`
-	Pairs    map[string]struct {
-		Rate   float64 `json:"rate"`
-		Hash   string  `json:"hash"`
-		Limits struct {
-			Maximal         int64 `json:"maximal"`
-			Minimal         int64 `json:"minimal"`
-			MaximalZeroConf struct {
-				BaseAsset  int64 `json:"baseAsset"`
-				QuoteAsset int64 `json:"quoteAsset"`
-			} `json:"maximalZeroConf"`
-		}
-		Fees struct {
-			Percentage float64 `json:"percentage"`
-			MinerFees  struct {
-				BaseAsset struct {
-					Normal  int64 `json:"normal"`
-					Reverse struct {
-						Lockup int64 `json:"lockup"`
-						Claim  int64 `json:"claim"`
-					} `json:"reverse"`
-				} `json:"baseAsset"`
-				QuoteAsset struct {
-					Normal  int64 `json:"normal"`
-					Reverse struct {
-						Lockup int64 `json:"lockup"`
-						Claim  int64 `json:"claim"`
-					} `json:"reverse"`
-				} `json:"quoteAsset"`
-			} `json:"minerFees"`
-		} `json:"fees"`
-	} `json:"pairs"`
-}
-
-type RoutingHint struct {
-	HopHintsList []struct {
-		NodeID                    string `json:"nodeId"`
-		ChanID                    string `json:"chanId"`
-		FeeBaseMsat               uint32 `json:"feeBaseMsat"`
-		FeeProportionalMillionths uint32 `json:"feeProportionalMillionths"`
-		CltvExpiryDelta           uint32 `json:"cltvExpiryDelta"`
-	} `json:"hopHintsList"`
-}
-
-type transactionStatus struct {
-	Status      string `json:"status"`
-	Transaction struct {
-		ID  string `json:"id"`
-		Hex string `json:"hex"`
-		ETA int    `json:"eta",omitempty`
-	} `json:"transaction",omitempty`
-}
-
 type BoltzConnector interface {
+	GetPair() (PairResponse, error)
 	GetReverseSwapInfo() (*ReverseSwapInfo, error)
 	NewReverseSwap(pairId string, orderSide string, amt btcutil.Amount, feesHash string, routingNode []byte) (*ReverseSwap, error)
 	CheckTransaction(transactionHex, lockupAddress string, amt int64) (string, error)
@@ -135,31 +44,33 @@ type BoltzConnector interface {
 }
 
 type Boltz struct {
-	apiURL string
-	chain  *chaincfg.Params
+	rest         *RestClient
+	apiURL       string
+	chain        *chaincfg.Params
+	claimAddress string
 }
 
-func NewBoltz(apiURL string, chain *chaincfg.Params) (*Boltz, error) {
+func NewBoltz(apiURL string, chain *chaincfg.Params, claimAddress string) (*Boltz, error) {
+	rest, _ := NewRestClient(apiURL)
 	return &Boltz{
+		rest,
 		apiURL,
 		chain,
+		claimAddress,
 	}, nil
 }
 
-func (boltz *Boltz) GetReverseSwapInfo() (*ReverseSwapInfo, error) {
-	// TODO Init getPair method
-	resp, err := http.Get(boltz.apiURL + getPairsEndpoint)
-	if err != nil {
-		return nil, fmt.Errorf("getpairs get %v: %w", boltz.apiURL+getPairsEndpoint, err)
-	}
-	defer resp.Body.Close()
+func (boltz *Boltz) GetPair() (response PairResponse, err error) {
+	err = boltz.rest.Get(getPairsEndpoint, &response)
+	return
+}
 
-	var pairs PairResponse
-	err = json.NewDecoder(resp.Body).Decode(&pairs)
+func (boltz *Boltz) GetReverseSwapInfo() (*ReverseSwapInfo, error) {
+
+	pairs, err := boltz.GetPair()
 	if err != nil {
-		return nil, fmt.Errorf("json decode (status: %v): %w", resp.Status, err)
+		return nil, err
 	}
-	// TODO End getPair method
 
 	for _, w := range pairs.Warnings {
 		if w == "reverse.swaps.disabled" {
@@ -185,23 +96,18 @@ func (boltz *Boltz) GetReverseSwapInfo() (*ReverseSwapInfo, error) {
 // NewReverseSwap begins the reverse submarine process.
 func (boltz *Boltz) NewReverseSwap(pairId string, orderSide string, amt btcutil.Amount, feesHash string, routingNode []byte) (*ReverseSwap, error) {
 	preimage := boltz.getPreimage()
-
+	preimageHash := sha256.Sum256(preimage)
 	key, err := boltz.getPrivate()
 	if err != nil {
 		return nil, fmt.Errorf("getPrivate: %w", err)
 	}
 
-	rs, err := boltz.createReverseSwap(pairId, orderSide, int64(amt), feesHash, preimage, key, routingNode)
+	rs, err := boltz.createReverseSwap(pairId, orderSide, int64(amt), feesHash, preimage, preimageHash, boltz.claimAddress, routingNode)
 	if err != nil {
 		return nil, fmt.Errorf("createReverseSwap amt:%v, preimage:%x, key:%x; %w", amt, preimage, key, err)
 	}
 
-	err = boltz.checkReverseSwap(preimage, key, rs)
-	if err != nil {
-		return nil, fmt.Errorf("checkReverseSwap preimage:%x, key:%x, %#v; %w", preimage, key, rs, err)
-	}
-
-	return &ReverseSwap{*rs, hex.EncodeToString(preimage), hex.EncodeToString(key.Serialize())}, nil
+	return &ReverseSwap{*rs, hex.EncodeToString(preimage), hex.EncodeToString(preimageHash[:]), hex.EncodeToString(key.Serialize())}, nil
 }
 
 // CheckTransaction checks that the transaction corresponds to the adresss and amount
@@ -235,62 +141,35 @@ func (boltz *Boltz) CheckTransaction(transactionHex, lockupAddress string, amt i
 
 // GetTransaction return the transaction after paying the ln invoice
 func (boltz *Boltz) GetTransaction(id, lockupAddress string, amt int64) (status, txid, tx string, eta int, err error) {
-	buffer := new(bytes.Buffer)
-	err = json.NewEncoder(buffer).Encode(struct {
-		ID string `json:"id"`
-	}{ID: id})
-	if err != nil {
-		err = fmt.Errorf("json encode %v: %w", id, err)
-		return
-	}
-	resp, err := http.Post(boltz.apiURL+swapStatusEndpoint, "application/json", buffer)
-	if err != nil {
-		err = fmt.Errorf("swapstatus post %v: %w", boltz.apiURL+swapStatusEndpoint, err)
-		return
-	}
-	defer resp.Body.Close()
+	request := transactionRequest{ID: id}
+	var response transactionStatus
+	err = boltz.rest.Post(swapStatusEndpoint, request, &response)
 
-	if resp.StatusCode != http.StatusOK {
-		e := struct {
-			Error string `json:"error"`
-		}{}
-		err = json.NewDecoder(resp.Body).Decode(&e)
-		if err != nil {
-			err = fmt.Errorf("json decode (status: %v): %w", resp.Status, err)
-			return
-		}
-		badRequestError := BadRequestError(e.Error)
-		err = fmt.Errorf("createswap result (status: %v) %w", resp.Status, &badRequestError)
-		return
-	}
-
-	var ts transactionStatus
-	err = json.NewDecoder(resp.Body).Decode(&ts)
 	if err != nil {
 		err = fmt.Errorf("json decode (status ok): %w", err)
 		return
 	}
-	if ts.Status != "transaction.mempool" && ts.Status != "transaction.confirmed" {
+	if response.Status != "transaction.mempool" && response.Status != "transaction.confirmed" {
 		err = ErrSwapNotFound
 		return
 	}
 
 	if lockupAddress != "" {
 		var calculatedTxid string
-		calculatedTxid, err = boltz.CheckTransaction(ts.Transaction.Hex, lockupAddress, amt)
+		calculatedTxid, err = boltz.CheckTransaction(response.Transaction.Hex, lockupAddress, amt)
 		if err != nil {
-			err = fmt.Errorf("CheckTransaction(%v, %v, %v): %w)", ts.Transaction.Hex, lockupAddress, amt, err)
+			err = fmt.Errorf("CheckTransaction(%v, %v, %v): %w)", response.Transaction.Hex, lockupAddress, amt, err)
 			return
 		}
-		if calculatedTxid != ts.Transaction.ID {
-			err = fmt.Errorf("bad txid: %v != %v", ts.Transaction.ID, calculatedTxid)
+		if calculatedTxid != response.Transaction.ID {
+			err = fmt.Errorf("bad txid: %v != %v", response.Transaction.ID, calculatedTxid)
 			return
 		}
 	}
-	status = ts.Status
-	tx = ts.Transaction.Hex
-	txid = ts.Transaction.ID
-	eta = ts.Transaction.ETA
+	status = response.Status
+	tx = response.Transaction.Hex
+	txid = response.Transaction.ID
+	eta = response.Transaction.ETA
 	return
 }
 
@@ -381,126 +260,76 @@ func (boltz *Boltz) ClaimTransaction(
 }
 
 func (boltz *Boltz) GetNodePubkey() (string, error) {
-	resp, err := http.Get(boltz.apiURL + getNodesEndpoint)
-	if err != nil {
-		return "", fmt.Errorf("getpairs get %v: %w", boltz.apiURL+getPairsEndpoint, err)
-	}
-	defer resp.Body.Close()
-
 	var nodes struct {
 		Nodes map[string]struct {
 			URIS    []string `json:"uris"`
 			NodeKey string   `json:"nodeKey"`
 		} `json:"nodes"`
 	}
-
-	err = json.NewDecoder(resp.Body).Decode(&nodes)
+	err := boltz.rest.Get(getNodesEndpoint, nodes)
 	if err != nil {
-		return "", fmt.Errorf("json decode (status: %v): %w", resp.Status, err)
+		return "", err
 	}
+
 	if b, ok := nodes.Nodes["BTC"]; ok {
 		return b.NodeKey, nil
 	}
 	return "", fmt.Errorf("pubkey not found")
 }
 func (boltz *Boltz) GetRoutingHints(routingNode []byte) ([]RoutingHint, error) {
-	buffer := new(bytes.Buffer)
-	err := json.NewEncoder(buffer).Encode(struct {
+	var request = struct {
 		Symbol      string `json:"symbol"`
 		RoutingNode string `json:"routingNode"`
 	}{
 		Symbol:      "BTC",
 		RoutingNode: hex.EncodeToString(routingNode),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("json encode %x: %w", routingNode, err)
-	}
-	resp, err := http.Post(boltz.apiURL+routingHintsEndpoint, "application/json", buffer)
-	if err != nil {
-		//log.Printf("routinghints post %v: %v", apiURL+routingHintsEndpoint, err)
-		return nil, fmt.Errorf("routinghints post %v: %w", boltz.apiURL+routingHintsEndpoint, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		e := struct {
-			Error string `json:"error"`
-		}{}
-		err = json.NewDecoder(resp.Body).Decode(&e)
-		if err != nil {
-			return nil, fmt.Errorf("json decode (status: %v): %w", resp.Status, err)
-		}
-		badRequestError := BadRequestError(e.Error)
-		//log.Printf("routinghints result (status: %v) %v", resp.Status, &badRequestError)
-		return nil, fmt.Errorf("routinghints result (status: %v) %w", resp.Status, &badRequestError)
 	}
 
-	var boltzHints struct {
+	var response struct {
 		RoutingHints []RoutingHint `json:"routingHints"`
 	}
-	err = json.NewDecoder(resp.Body).Decode(&boltzHints)
+
+	err := boltz.rest.Post(routingHintsEndpoint, request, &response)
 	if err != nil {
-		return nil, fmt.Errorf("json decode (status ok): %w", err)
+		return nil, err
 	}
 
-	return boltzHints.RoutingHints, nil
+	return response.RoutingHints, nil
 }
 
 /**
 pairId = "BTC/BTC"
 orderSide = "buy"
 */
-func (boltz *Boltz) createReverseSwap(pairId string, orderSide string, amt int64, feesHash string, preimage []byte, key *btcec.PrivateKey, routingNode []byte) (*boltzReverseSwap, error) {
-	h := sha256.Sum256(preimage)
-	buffer := new(bytes.Buffer)
-	err := json.NewEncoder(buffer).Encode(struct {
-		Type           string `json:"type"`
-		PairID         string `json:"pairId"`
-		OrderSide      string `json:"orderSide"`
-		InvoiceAmount  int64  `json:"invoiceAmount"`
-		PreimageHash   string `json:"preimageHash"`
-		PairHash       string `json:"pairHash,omitempty"`
-		ClaimPublicKey string `json:"claimPublicKey"`
-		RoutingNode    string `json:"routingNode,omitempty"`
+func (boltz *Boltz) createReverseSwap(pairId string, orderSide string, amt int64, feesHash string, preimage []byte, preimageHash [32]byte, claimAddress string, routingNode []byte) (*boltzReverseSwap, error) {
+	var request = struct {
+		Type          string `json:"type"`
+		PairID        string `json:"pairId"`
+		OrderSide     string `json:"orderSide"`
+		InvoiceAmount int64  `json:"invoiceAmount"`
+		PreimageHash  string `json:"preimageHash"`
+		PairHash      string `json:"pairHash,omitempty"`
+		ClaimAddress  string `json:"claimAddress"` //ClaimPublicKey string `json:"claimPublicKey"`
+		RoutingNode   string `json:"routingNode,omitempty"`
 	}{
-		Type:           "reversesubmarine",
-		PairID:         pairId,
-		OrderSide:      orderSide,
-		InvoiceAmount:  amt,
-		PreimageHash:   hex.EncodeToString(h[:]),
-		PairHash:       feesHash,
-		ClaimPublicKey: hex.EncodeToString(key.PubKey().SerializeCompressed()),
-		RoutingNode:    hex.EncodeToString(routingNode),
-	})
+		Type:          "reversesubmarine",
+		PairID:        pairId,
+		OrderSide:     orderSide,
+		InvoiceAmount: amt,
+		PreimageHash:  hex.EncodeToString(preimageHash[:]),
+		PairHash:      feesHash,
+		ClaimAddress:  claimAddress, //ClaimPublicKey: hex.EncodeToString(key.PubKey().SerializeCompressed()), -> key *btcec.PrivateKey
+		RoutingNode:   hex.EncodeToString(routingNode),
+	}
+
+	var response boltzReverseSwap
+
+	err := boltz.rest.Post(createSwapEndpoint, request, &response)
 	if err != nil {
-		return nil, fmt.Errorf("json encode %v, %v, %v: %w", amt, preimage, key, err)
+		return nil, err
 	}
 
-	resp, err := http.Post(boltz.apiURL+createSwapEndpoint, "application/json", buffer)
-	if err != nil {
-		return nil, fmt.Errorf("createswap post %v: %w", boltz.apiURL+createSwapEndpoint, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		e := struct {
-			Error string `json:"error"`
-		}{}
-		err = json.NewDecoder(resp.Body).Decode(&e)
-		if err != nil {
-			return nil, fmt.Errorf("json decode (status: %v): %w", resp.Status, err)
-		}
-		badRequestError := BadRequestError(e.Error)
-		return nil, fmt.Errorf("createswap result (status: %v) %w", resp.Status, &badRequestError)
-	}
-
-	var rs boltzReverseSwap
-	err = json.NewDecoder(resp.Body).Decode(&rs)
-	if err != nil {
-		return nil, fmt.Errorf("json decode (status ok): %w", err)
-	}
-
-	return &rs, nil
+	return &response, nil
 }
 
 func (boltz *Boltz) checkHeight(h int64, hs string) string {
@@ -514,39 +343,6 @@ func (boltz *Boltz) checkHeight(h int64, hs string) string {
 		return hs
 	}
 	return ""
-}
-
-func (boltz *Boltz) checkReverseSwap(preimage []byte, key *btcec.PrivateKey, rs *boltzReverseSwap) error {
-	script, err := hex.DecodeString(rs.RedeemScript)
-	if err != nil {
-		return fmt.Errorf("hex.DecodeString %v: %w", rs.RedeemScript, err)
-	}
-	dis, err := txscript.DisasmString(script)
-	if err != nil {
-		return fmt.Errorf("txscript.DisasmString %x: %w", script, err)
-	}
-	d := strings.Split(dis, " ")
-	h := sha256.Sum256(preimage)
-
-	s := fmt.Sprintf(
-		"OP_SIZE 20 OP_EQUAL OP_IF OP_HASH160 %x OP_EQUALVERIFY %x OP_ELSE OP_DROP %s OP_CHECKLOCKTIMEVERIFY OP_DROP %s OP_ENDIF OP_CHECKSIG",
-		input.Ripemd160H(h[:]),
-		key.PubKey().SerializeCompressed(),
-		boltz.checkHeight(rs.TimeoutBlockHeight, d[10]),
-		d[13],
-	)
-	if s != dis {
-		return fmt.Errorf("bad script")
-	}
-	a, err := boltz.addressWitnessScriptHash(script, boltz.chain)
-	if err != nil {
-		return fmt.Errorf("addressWitnessScriptHash %v: %w", script, err)
-	}
-
-	if rs.LockupAddress != a.String() {
-		return fmt.Errorf("bad address: %v instead of %v", rs.LockupAddress, a.String())
-	}
-	return nil
 }
 
 func (boltz *Boltz) addressWitnessScriptHash(script []byte, net *chaincfg.Params) (*btcutil.AddressWitnessScriptHash, error) {
@@ -609,29 +405,19 @@ func (boltz *Boltz) claimTransaction(
 }
 
 func (boltz *Boltz) broadcastTransaction(tx string) (string, error) {
-	buffer := new(bytes.Buffer)
-	err := json.NewEncoder(buffer).Encode(struct {
+	var request = struct {
 		Currency       string `json:"currency"`
 		TransactionHex string `json:"transactionHex"`
-	}{"BTC", tx})
-	if err != nil {
-		return "", fmt.Errorf("json encode %v: %w", tx, err)
-	}
-	resp, err := http.Post(boltz.apiURL+broadcastTransactionEndpoint, "application/json", buffer)
-	if err != nil {
-		return "", fmt.Errorf("broadcasttransaction post %v: %w", boltz.apiURL+broadcastTransactionEndpoint, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("broadcasttransaction result (status: %v)", resp.Status)
-	}
+	}{"BTC", tx}
 
-	var tid struct {
+	var response struct {
 		TransactionID string `json:"transactionId"`
 	}
-	err = json.NewDecoder(resp.Body).Decode(&tid)
+
+	err := boltz.rest.Post(broadcastTransactionEndpoint, request, &response)
 	if err != nil {
-		return "", fmt.Errorf("json decode (status ok): %w", err)
+		return "", err
 	}
-	return tid.TransactionID, nil
+
+	return response.TransactionID, nil
 }

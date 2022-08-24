@@ -18,5 +18,12 @@
     },
     "boltz": {
         "endpoint": "http://localhost:9001"
+    },
+    "accounts": {
+        "rsk": {
+            "privateKey": "c85ef7d79691fe79573b1a7064c19c1a9819ebdbd1faaab1a8ec92344438aaf4",
+            "address": "0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826"
+        }
     }
+
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/patogallaiov/boltz-poc/connectors"
 	"github.com/patogallaiov/boltz-poc/http"
+	"github.com/patogallaiov/boltz-poc/services"
 	"github.com/patogallaiov/boltz-poc/storage"
 	log "github.com/sirupsen/logrus"
 	"github.com/tkanos/gonfig"
@@ -45,9 +46,9 @@ func initLogger() {
 	}
 }
 
-func startServer(boltz *connectors.Boltz, rsk *connectors.RSK, db *storage.DB) {
+func startServer(boltz *connectors.Boltz, rsk *connectors.RSK, db *storage.DB, checkout *services.CheckoutService) {
 
-	srv = http.New(boltz, rsk, db)
+	srv = http.New(boltz, rsk, db, checkout)
 	log.Debug("registering server (this might take a while)")
 	port := cfg.Server.Port
 
@@ -78,7 +79,7 @@ func main() {
 	}
 
 	// INIT RSK
-	rsk, err := connectors.NewRSK(cfg.ErpKeys)
+	rsk, err := connectors.NewRSK(cfg.Accounts.RSK.PrivateKey)
 	if err != nil {
 		log.Fatal("RSK error: ", err)
 	}
@@ -89,7 +90,7 @@ func main() {
 	}
 
 	// INIT Boltz
-	boltz, err := connectors.NewBoltz(cfg.Boltz.Endpoint, &chaincfg.SimNetParams)
+	boltz, err := connectors.NewBoltz(cfg.Boltz.Endpoint, &chaincfg.SimNetParams, cfg.Accounts.RSK.Address)
 	if err != nil {
 		log.Fatal("Boltz error: ", err)
 	}
@@ -100,10 +101,13 @@ func main() {
 	}
 	log.Debugf("Verified connection to Boltz GetReverseSwapInfo -> %+v", info)
 
+	// INIT Checkout
+	checkout := services.NewCheckoutService(boltz, db)
+
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
-	startServer(boltz, rsk, db)
+	startServer(boltz, rsk, db, checkout)
 
 	<-done
 

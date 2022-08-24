@@ -2,11 +2,13 @@ package connectors
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/url"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
 
 	gethTypes "github.com/ethereum/go-ethereum/core/types"
@@ -43,13 +45,17 @@ type RSKConnector interface {
 }
 
 type RSK struct {
-	c       *ethclient.Client
-	erpKeys []string
+	c          *ethclient.Client
+	privateKey *ecdsa.PrivateKey
+	address    common.Address
 }
 
-func NewRSK(erpKeys []string) (*RSK, error) {
+func NewRSK(privateKeyString string) (*RSK, error) {
+	key, _ := crypto.HexToECDSA(privateKeyString)
+	address := crypto.PubkeyToAddress(key.PublicKey)
 	return &RSK{
-		erpKeys: erpKeys,
+		privateKey: key,
+		address:    address,
 	}, nil
 }
 
