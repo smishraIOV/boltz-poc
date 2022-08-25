@@ -41,3 +41,7 @@ func (service *CheckoutService) CreateInvoice(request storage.PaymentRequest) (*
 func (service *CheckoutService) GetInvoices() (any, error) {
 	return service.db.GetPayments()
 }
+
+func (service *CheckoutService) GetInvoice(preimageHash string) (any, error) {
+	return service.db.GetPayment(preimageHash)
+}

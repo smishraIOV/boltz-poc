@@ -8,13 +8,27 @@
  - Build RSK node image -> Run: `npm docker:rskj:build`
 
 
-# 1. Start environment
-- Run: `npm start`
+# 1. Setup environment
+- Run: `npm run docker:volumes:reset`
+- Run: `npm run docker:start`
 
-# 2. Stop environment
-- Run: `npm stop`
+# 2. Start server
+- Run: `npm run server`
+
+# 3. Start client
+- Run: `npm run client`
+- Go to: `http://localhost:3000`
+
+# 4. Stop environment
+- Run: `npm run docker:stop`
 
 # X. Miscellaneous
+
+### Generate contract.go
+- install protoc ([here](https://grpc.io/docs/protoc-installation/))
+- install solc ([here](https://docs.soliditylang.org/en/v0.8.9/installing-solidity.html) and [here](https://www.educative.io/answers/how-to-install-solidity-in-mac))
+- Clone Geth / make / make devtools ([doc](https://goethereumbook.org/smart-contract-compile/))
+- `abigen --abi=server/abi/EtherSwap.json --out=server/abi/EtherSwap.go --pkg=abi`
 
 ### Fix common error: https://github.com/lightningnetwork/lnd/issues/1177
 * Generate btc blocks

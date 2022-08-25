@@ -110,7 +110,7 @@ dist
 
 docker/polar/data/rskj/database
 
-docker/polar/volumes/
+docker/polar/volumes
 
 #NEXTJS
 

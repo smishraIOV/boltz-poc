@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math/big"
 	"strings"
 
 	"os"
@@ -17,11 +18,14 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
-	"github.com/ethereum/go-ethereum/accounts/abi"
+	ethAbi "github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	gethTypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
+	"github.com/patogallaiov/boltz-poc/abi"
 	"github.com/patogallaiov/boltz-poc/config"
+	"github.com/patogallaiov/boltz-poc/storage"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -55,23 +59,27 @@ type BoltzConnector interface {
 }
 
 type Boltz struct {
-	rest         *RestClient
-	apiURL       string
-	abiPath      string
-	chain        *chaincfg.Params
-	claimAddress string
-	rsk          RSKConnector
+	rest             *RestClient
+	apiURL           string
+	abiPath          string
+	chain            *chaincfg.Params
+	claimAddress     string
+	rsk              RSKConnector
+	db               storage.DBConnector
+	etherSwapAddress common.Address
+	erc20SwapAddress common.Address
 }
 
-func NewBoltz(appCfg config.Config, chain *chaincfg.Params, claimAddress string, rsk RSKConnector) (*Boltz, error) {
+func NewBoltz(appCfg config.Config, chain *chaincfg.Params, claimAddress string, rsk RSKConnector, db storage.DBConnector) (*Boltz, error) {
 	rest, _ := NewRestClient(appCfg.Boltz.Endpoint)
 	return &Boltz{
-		rest,
-		appCfg.Boltz.Endpoint,
-		appCfg.Boltz.AbiPath,
-		chain,
-		claimAddress,
-		rsk,
+		rest:         rest,
+		apiURL:       appCfg.Boltz.Endpoint,
+		abiPath:      appCfg.Boltz.AbiPath,
+		chain:        chain,
+		claimAddress: claimAddress,
+		rsk:          rsk,
+		db:           db,
 	}, nil
 }
 func (boltz *Boltz) Initialize() error {
@@ -85,10 +93,10 @@ func (boltz *Boltz) Initialize() error {
 	if err != nil {
 		return err
 	}
-	etherSwapAddress := common.HexToAddress(contracts.Ethereum.SwapContracts.EtherSwap)
-	erc20SwapAddress := common.HexToAddress(contracts.Ethereum.SwapContracts.ERC20Swap)
+	boltz.etherSwapAddress = common.HexToAddress(contracts.Ethereum.SwapContracts.EtherSwap)
+	boltz.erc20SwapAddress = common.HexToAddress(contracts.Ethereum.SwapContracts.ERC20Swap)
 
-	boltz.rsk.Subscribe([]common.Address{etherSwapAddress, erc20SwapAddress}, boltz.receiveEvent)
+	boltz.rsk.Subscribe([]common.Address{boltz.etherSwapAddress, boltz.erc20SwapAddress}, boltz.receiveEvent)
 	return nil
 }
 
@@ -100,23 +108,69 @@ func (boltz *Boltz) receiveEvent(elog gethTypes.Log) {
 		log.Fatalf("Error reading abi file: %v", errFile)
 		return
 	}
-	contractAbi, err := abi.JSON(strings.NewReader(string(abiFile)))
+	contractAbi, err := ethAbi.JSON(strings.NewReader(string(abiFile)))
 	if err != nil {
 		log.Fatalf("Error decoding abi: %v", err)
 		return
 	}
-	event := map[string]interface{}{}
-	err = contractAbi.UnpackIntoMap(event, "Lockup", elog.Data)
-	if err != nil {
-		log.Fatalf("Error decoding event: %v", err)
-		return
+	lockupEvent := common.HexToHash("15b4b8206809535e547317cd5cedc86cff6e7d203551f93701786ddaf14fd9f9")
+
+	switch elog.Topics[0].Hex() {
+	case lockupEvent.Hex():
+		event := struct {
+			Amount       *big.Int
+			ClaimAddress common.Address
+			Timelock     *big.Int
+		}{}
+		err = contractAbi.UnpackIntoInterface(&event, "Lockup", elog.Data)
+		if err != nil {
+			log.Fatalf("Error decoding event: %v", err)
+			return
+		}
+		preimageHash := elog.Topics[1].Hex()
+		log.Debugf("Lockup received preimageHash: %s", preimageHash)
+		preimageHash = strings.TrimPrefix(preimageHash, "0x")
+		payment, err := boltz.db.GetPayment(preimageHash)
+
+		if err != nil {
+			log.Fatalf("Payment (%s) NOT found: %v", preimageHash, err)
+			return
+		}
+
+		var preimage [32]byte = common.HexToHash(payment.Preimage)
+		refundAddress := elog.Topics[2].Hex()
+		log.Debugf("Lockup event decoded: %v", event)
+		log.Debugf("Claiming payment.Preimage: %s", payment.Preimage)
+		log.Debugf("Claiming refundAddress: %s", refundAddress)
+		log.Debugf("Claiming preimageHash: %s", preimageHash)
+		log.Debugf("Claiming event.Timelock: %s", event.Timelock)
+		log.Debugf("Claiming event.Amount: %s", event.Amount)
+		log.Debugf("Claiming elog.Topics[0].Hex(): %s", elog.Topics[0].Hex())
+		log.Debugf("Claiming elog.Topics[1].Hex(): %s", elog.Topics[1].Hex())
+		log.Debugf("Claiming elog.Topics[2].Hex(): %s", elog.Topics[2].Hex())
+		log.Debugf("Claiming refund address: %s", common.HexToAddress(refundAddress))
+
+		swapContract, err := abi.NewAbi(boltz.etherSwapAddress, boltz.rsk.GetClient())
+		if err != nil {
+			log.Fatalf("Error getting contract abi: %v", err)
+			return
+		}
+		auth, err := boltz.rsk.GetTransactor(bind.NewKeyedTransactorWithChainID)
+		if err != nil {
+			log.Fatalf("Error building transactor: %v", err)
+			return
+		}
+		log.Debugf("Claiming auth.From: %s", auth.From)
+		//auth.NoSend = true
+		result, err := swapContract.AbiTransactor.Claim(auth, preimage, event.Amount, common.HexToAddress(refundAddress), event.Timelock)
+		if err != nil {
+			log.Fatalf("Error executing claim tx: %v", err)
+			return
+		}
+		log.Infof("Claim transaction sent data: %v", common.Bytes2Hex(result.Data()))
+	default:
+		log.Info("Event received, not mapped.")
 	}
-
-	log.Debug(event)
-	log.Debugf("Lockup claimAddress: %s", event["claimAddress"])
-	preimageHash := elog.Topics[1].Hex()
-
-	log.Debugf("Lockup preimageHash: %s", preimageHash)
 
 }
 
@@ -167,7 +221,7 @@ func (boltz *Boltz) NewReverseSwap(pairId string, orderSide string, amt btcutil.
 		return nil, fmt.Errorf("getPrivate: %w", err)
 	}
 
-	rs, err := boltz.createReverseSwap(pairId, orderSide, int64(amt), feesHash, preimage, preimageHash, boltz.claimAddress, routingNode)
+	rs, err := boltz.createReverseSwap(pairId, orderSide, int64(amt), feesHash, preimage, preimageHash, boltz.rsk.GetAddress(), routingNode)
 	if err != nil {
 		return nil, fmt.Errorf("createReverseSwap amt:%v, preimage:%x, key:%x; %w", amt, preimage, key, err)
 	}
@@ -366,7 +420,7 @@ func (boltz *Boltz) GetRoutingHints(routingNode []byte) ([]RoutingHint, error) {
 pairId = "BTC/BTC"
 orderSide = "buy"
 */
-func (boltz *Boltz) createReverseSwap(pairId string, orderSide string, amt int64, feesHash string, preimage []byte, preimageHash [32]byte, claimAddress string, routingNode []byte) (*boltzReverseSwap, error) {
+func (boltz *Boltz) createReverseSwap(pairId string, orderSide string, amt int64, feesHash string, preimage []byte, preimageHash [32]byte, claimAddress common.Address, routingNode []byte) (*boltzReverseSwap, error) {
 	var request = struct {
 		Type          string `json:"type"`
 		PairID        string `json:"pairId"`
@@ -383,9 +437,11 @@ func (boltz *Boltz) createReverseSwap(pairId string, orderSide string, amt int64
 		InvoiceAmount: amt,
 		PreimageHash:  hex.EncodeToString(preimageHash[:]),
 		PairHash:      feesHash,
-		ClaimAddress:  claimAddress, //ClaimPublicKey: hex.EncodeToString(key.PubKey().SerializeCompressed()), -> key *btcec.PrivateKey
+		ClaimAddress:  claimAddress.Hex(), //ClaimPublicKey: hex.EncodeToString(key.PubKey().SerializeCompressed()), -> key *btcec.PrivateKey
 		RoutingNode:   hex.EncodeToString(routingNode),
 	}
+
+	log.Debugf("Creating reverse swap: %v", request)
 
 	var response boltzReverseSwap
 

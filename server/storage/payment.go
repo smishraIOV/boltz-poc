@@ -47,6 +47,12 @@ const getPayments = `
 SELECT *
 FROM payment`
 
+const getPayment = `
+SELECT *
+FROM payment
+WHERE PreimageHash = ?
+LIMIT 1`
+
 func (db *DB) SavePayment(payment *Payment) error {
 	log.Debug("inserting payment{", payment.PreimageHash, "}", ": ", payment)
 	query, args, _ := sqlx.Named(insertPayment, payment)
@@ -77,4 +83,21 @@ func (db *DB) GetPayments() ([]*Payment, error) {
 		payments = append(payments, &payment)
 	}
 	return payments, nil
+}
+
+func (db *DB) GetPayment(preimageHash string) (result Payment, err error) {
+	log.Debugf("retrieving payment: %s ", preimageHash)
+	rows, err := db.db.Queryx(getPayment, preimageHash)
+	if err != nil {
+		log.Fatalf("Error retrieving payment: %v", err)
+		return
+	}
+	if rows.Next() {
+		if err = rows.StructScan(&result); err != nil {
+			log.Fatalf("Error mapping payment: %v", err)
+			return
+		}
+	}
+	return
+
 }

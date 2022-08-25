@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
 
-	"github.com/ethereum/go-ethereum/core/types"
 	gethTypes "github.com/ethereum/go-ethereum/core/types"
 
 	"math/big"
@@ -36,20 +36,26 @@ const (
 )
 
 type RSKConnector interface {
+	GetAddress() common.Address
 	Connect(endpoint string, chainId *big.Int) error
-	CheckConnection() error
-	Subscribe([]common.Address, func(gethTypes.Log)) error
+	GetClient() *ethclient.Client
 	Close()
+	CheckConnection() error
+	GetNonce() (uint64, error)
 	GetChainId() (*big.Int, error)
-	EstimateGas(addr string, value *big.Int, data []byte) (uint64, error)
 	GasPrice() (*big.Int, error)
+	EstimateGas(addr string, value *big.Int, data []byte) (uint64, error)
+	SendTransaction(value *big.Int, gasLimit uint64, to common.Address, data []byte) (*gethTypes.Transaction, error)
+	Subscribe([]common.Address, func(gethTypes.Log)) error
 	GetTxStatus(ctx context.Context, tx *gethTypes.Transaction) (bool, error)
+	GetTransactor(func(key *ecdsa.PrivateKey, chainID *big.Int) (*bind.TransactOpts, error)) (*bind.TransactOpts, error)
 }
 
 type RSK struct {
-	c          *ethclient.Client
+	client     *ethclient.Client
 	privateKey *ecdsa.PrivateKey
-	address    common.Address
+	Address    common.Address
+	chainId    *big.Int
 }
 
 func NewRSK(privateKeyString string) (*RSK, error) {
@@ -57,8 +63,16 @@ func NewRSK(privateKeyString string) (*RSK, error) {
 	address := crypto.PubkeyToAddress(key.PublicKey)
 	return &RSK{
 		privateKey: key,
-		address:    address,
+		Address:    address,
 	}, nil
+}
+
+func (rsk *RSK) GetAddress() common.Address {
+	return rsk.Address
+}
+
+func (rsk *RSK) GetClient() *ethclient.Client {
+	return rsk.client
 }
 
 func (rsk *RSK) Connect(endpoint string, chainId *big.Int) error {
@@ -91,7 +105,7 @@ func (rsk *RSK) Connect(endpoint string, chainId *big.Int) error {
 		}
 	}
 
-	rsk.c = ethC
+	rsk.client = ethC
 
 	log.Debug("verifying connection to RSK node")
 	// test connection
@@ -103,7 +117,73 @@ func (rsk *RSK) Connect(endpoint string, chainId *big.Int) error {
 	if chainId.Cmp(rskChainId) != 0 {
 		return fmt.Errorf("chain id mismatch; expected chain id: %v, rsk node chain id: %v", chainId, rskChainId)
 	}
+	rsk.chainId = rskChainId
+
 	return nil
+}
+
+func (rsk *RSK) GetNonce() (uint64, error) {
+	return rsk.client.PendingNonceAt(context.Background(), rsk.Address)
+}
+
+/**
+value := big.NewInt(1000000000000000000) // in wei (1 eth)
+gasLimit := uint64(21000)                // in units
+*/
+func (rsk *RSK) SendTransaction(value *big.Int, gasLimit uint64, to common.Address, data []byte) (*gethTypes.Transaction, error) {
+
+	// Nonce
+	nonce, err := rsk.GetNonce()
+	if err != nil {
+		return nil, err
+	}
+
+	// Gas Price
+	gasPrice, err := rsk.client.SuggestGasPrice(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	// New TX
+	tx := gethTypes.NewTransaction(nonce, to, value, gasLimit, gasPrice, data)
+
+	// Sign TX
+	tx, errTx := gethTypes.SignTx(tx, gethTypes.NewEIP155Signer(rsk.chainId), rsk.privateKey)
+	if errTx != nil {
+		return nil, errTx
+	}
+
+	// SEND
+	if err := rsk.client.SendTransaction(context.Background(), tx); err != nil {
+		return nil, err
+	}
+
+	return tx, nil
+
+}
+
+func (rsk *RSK) GetTransactor(transactor func(key *ecdsa.PrivateKey, chainID *big.Int) (*bind.TransactOpts, error)) (*bind.TransactOpts, error) {
+
+	auth, err := transactor(rsk.privateKey, rsk.chainId)
+	if err != nil {
+		return nil, err
+	}
+	// Nonce
+	nonce, err := rsk.GetNonce()
+	if err != nil {
+		return nil, err
+	}
+
+	// Gas Price
+	gasPrice, err := rsk.client.SuggestGasPrice(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	auth.Nonce = big.NewInt(int64(nonce))
+	auth.Value = big.NewInt(0)     // in wei
+	auth.GasLimit = uint64(600000) // in units
+	auth.GasPrice = gasPrice
+	return auth, nil
 }
 
 func (rsk *RSK) Subscribe(addresses []common.Address, callback func(log gethTypes.Log)) error {
@@ -113,10 +193,10 @@ func (rsk *RSK) Subscribe(addresses []common.Address, callback func(log gethType
 	}
 
 	//Log Channel
-	logs := make(chan types.Log)
+	logs := make(chan gethTypes.Log)
 
 	//Subscribe
-	sub, err := rsk.c.SubscribeFilterLogs(context.Background(), query, logs)
+	sub, err := rsk.client.SubscribeFilterLogs(context.Background(), query, logs)
 	if err != nil {
 		return err
 	}
@@ -151,7 +231,7 @@ func (rsk *RSK) CheckConnection() error {
 
 func (rsk *RSK) Close() {
 	log.Debug("closing RSK connection")
-	rsk.c.Close()
+	rsk.client.Close()
 }
 
 func (rsk *RSK) GetChainId() (*big.Int, error) {
@@ -160,7 +240,7 @@ func (rsk *RSK) GetChainId() (*big.Int, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()
 		var chainId *big.Int
-		chainId, err = rsk.c.ChainID(ctx)
+		chainId, err = rsk.client.ChainID(ctx)
 		if err == nil {
 			return chainId, nil
 		}
@@ -192,7 +272,7 @@ func (rsk *RSK) EstimateGas(addr string, value *big.Int, data []byte) (uint64, e
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()
 		var gas uint64
-		gas, err = rsk.c.EstimateGas(ctx, msg)
+		gas, err = rsk.client.EstimateGas(ctx, msg)
 		if gas > 0 {
 			return gas + additionalGas, nil
 		}
@@ -207,7 +287,7 @@ func (rsk *RSK) GasPrice() (*big.Int, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()
 		var price *big.Int
-		price, err = rsk.c.SuggestGasPrice(ctx)
+		price, err = rsk.client.SuggestGasPrice(ctx)
 		if price != nil && price.Cmp(big.NewInt(0)) >= 0 {
 			return price, nil
 		}
@@ -224,7 +304,7 @@ func (rsk *RSK) GetTxStatus(ctx context.Context, tx *gethTypes.Transaction) (boo
 		case <-ticker.C:
 			cctx, cancel := context.WithTimeout(ctx, rpcTimeout)
 			defer cancel()
-			r, _ := rsk.c.TransactionReceipt(cctx, tx.Hash())
+			r, _ := rsk.client.TransactionReceipt(cctx, tx.Hash())
 			if r != nil {
 				return r.Status == 1, nil
 			}
@@ -245,7 +325,7 @@ func (rsk *RSK) isNewAccount(addr common.Address) bool {
 	for i := 0; i < retries; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()
-		code, err = rsk.c.CodeAt(ctx, addr, nil)
+		code, err = rsk.client.CodeAt(ctx, addr, nil)
 		if err == nil {
 			break
 		}
@@ -254,7 +334,7 @@ func (rsk *RSK) isNewAccount(addr common.Address) bool {
 	for i := 0; i < retries; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()
-		bal, err = rsk.c.BalanceAt(ctx, addr, nil)
+		bal, err = rsk.client.BalanceAt(ctx, addr, nil)
 		if err == nil {
 			break
 		}
@@ -263,7 +343,7 @@ func (rsk *RSK) isNewAccount(addr common.Address) bool {
 	for i := 0; i < retries; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()
-		n, err = rsk.c.NonceAt(ctx, addr, nil)
+		n, err = rsk.client.NonceAt(ctx, addr, nil)
 		if err == nil {
 			break
 		}

@@ -18,7 +18,7 @@ const Dashboard: NextPage = () => {
 
   useEffect(() => {
     setLoading(true)
-    fetch('http://localhost:8080/payment')
+    fetch('http://localhost:8080/payment/')
       .then((res) => res.json())
       .then((data) => {
         setData(data)

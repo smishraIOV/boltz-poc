@@ -15,6 +15,7 @@ type DBConnector interface {
 	Close() error
 	SavePayment(payment *Payment) error
 	GetPayments() (result []*Payment, err error)
+	GetPayment(preimageHash string) (result Payment, err error)
 }
 
 type DB struct {

@@ -92,7 +92,7 @@ func main() {
 
 	// INIT Boltz
 	log.Debugln("Initializing Boltz client...")
-	boltz, err := connectors.NewBoltz(cfg, &chaincfg.SimNetParams, cfg.Accounts.RSK.Address, rsk)
+	boltz, err := connectors.NewBoltz(cfg, &chaincfg.SimNetParams, cfg.Accounts.RSK.Address, rsk, db)
 	if err != nil {
 		log.Fatal("Boltz error: ", err)
 	}

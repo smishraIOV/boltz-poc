@@ -13,11 +13,12 @@
         "path": "server.db"
     },
     "rsk": {
-        "endpoint": "http://host.docker.internal:4444",
+        "endpoint": "ws://host.docker.internal:4445/websocket",
         "chainId": 33
     },
     "boltz": {
-        "endpoint": "http://host.docker.internal:9001"
+        "endpoint": "http://host.docker.internal:9001",
+        "abiPath": "/abi/EtherSwap.json"
     },
     "accounts": {
         "rsk": {
