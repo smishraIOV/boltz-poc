@@ -75,7 +75,7 @@ const Home: NextPage = () => {
           <div>
             
             <div>
-              {!lnwallet ? 
+              {!isEnabled ? 
                   <button onClick={(e)=>isProviderEnabled()}> Connect LN wallet<i aria-label="icon: thunderbolt" className="anticon anticon-thunderbolt"> <svg viewBox="64 64 896 896" data-icon="thunderbolt" width="1em" height="1em" fill="currentColor" aria-hidden="true"> <path d="M848 359.3H627.7L825.8 109c4.1-5.3.4-13-6.3-13H436c-2.8 0-5.5 1.5-6.9 4L170 547.5c-3.1 5.3.7 12 6.9 12h174.4l-89.4 357.6c-1.9 7.8 7.5 13.3 13.3 7.7L853.5 373c5.2-4.9 1.7-13.7-5.5-13.7z"></path> </svg> </i></button> 
                   : 
                   <p>Wallet connected: {lnwallet?.node.alias} ({lnwallet?.node.pubkey.slice(0, 5)}...)</p>
@@ -90,7 +90,7 @@ const Home: NextPage = () => {
             <p>Click to buy.</p>
             <p></p>
             <div>
-                <button className={styles.button} onClick={(e)=>onClick(e)} disabled={!lnwallet}>
+                <button className={styles.button} onClick={(e)=>onClick(e)} disabled={!isEnabled}>
                   Pay with&nbsp;  <i aria-label="icon: thunderbolt" className="anticon anticon-thunderbolt"> <svg viewBox="64 64 896 896" data-icon="thunderbolt" width="1em" height="1em" fill="currentColor" aria-hidden="true"> <path d="M848 359.3H627.7L825.8 109c4.1-5.3.4-13-6.3-13H436c-2.8 0-5.5 1.5-6.9 4L170 547.5c-3.1 5.3.7 12 6.9 12h174.4l-89.4 357.6c-1.9 7.8 7.5 13.3 13.3 7.7L853.5 373c5.2-4.9 1.7-13.7-5.5-13.7z"></path> </svg> </i>
                 </button>
               <button className={styles.button} onClick={(e)=>onClick(e)}>
@@ -103,7 +103,7 @@ const Home: NextPage = () => {
             <p>Click to buy.</p>
             <p></p>
             <div>
-                <button className={styles.button} onClick={(e)=>onClick(e)} disabled={!lnwallet}>
+                <button className={styles.button} onClick={(e)=>onClick(e)} disabled={!isEnabled}>
                   Pay with&nbsp;  <i aria-label="icon: thunderbolt" className="anticon anticon-thunderbolt"> <svg viewBox="64 64 896 896" data-icon="thunderbolt" width="1em" height="1em" fill="currentColor" aria-hidden="true"> <path d="M848 359.3H627.7L825.8 109c4.1-5.3.4-13-6.3-13H436c-2.8 0-5.5 1.5-6.9 4L170 547.5c-3.1 5.3.7 12 6.9 12h174.4l-89.4 357.6c-1.9 7.8 7.5 13.3 13.3 7.7L853.5 373c5.2-4.9 1.7-13.7-5.5-13.7z"></path> </svg> </i>
                 </button>
               <button className={styles.button} onClick={(e)=>onClick(e)}>
@@ -116,7 +116,7 @@ const Home: NextPage = () => {
             <p>Click to buy.</p>
             <p></p>
             <div>
-                <button className={styles.button} onClick={(e)=>onClick(e)} disabled={!lnwallet}>
+                <button className={styles.button} onClick={(e)=>onClick(e)} disabled={!isEnabled}>
                   Pay with&nbsp;  <i aria-label="icon: thunderbolt" className="anticon anticon-thunderbolt"> <svg viewBox="64 64 896 896" data-icon="thunderbolt" width="1em" height="1em" fill="currentColor" aria-hidden="true"> <path d="M848 359.3H627.7L825.8 109c4.1-5.3.4-13-6.3-13H436c-2.8 0-5.5 1.5-6.9 4L170 547.5c-3.1 5.3.7 12 6.9 12h174.4l-89.4 357.6c-1.9 7.8 7.5 13.3 13.3 7.7L853.5 373c5.2-4.9 1.7-13.7-5.5-13.7z"></path> </svg> </i>
                 </button>
               <button className={styles.button} onClick={(e)=>onClick(e)}>

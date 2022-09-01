@@ -2,12 +2,12 @@ package storage
 
 import (
 	"github.com/jmoiron/sqlx"
+	_ "github.com/mattn/go-sqlite3"
 	log "github.com/sirupsen/logrus"
-	_ "modernc.org/sqlite"
 )
 
 const (
-	driver = "sqlite"
+	driver = "sqlite3"
 )
 
 type DBConnector interface {

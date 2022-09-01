@@ -72,7 +72,7 @@ func (db *DB) GetPayments() ([]*Payment, error) {
 	if err == sql.ErrNoRows {
 		return payments, nil
 	}
-
+	defer rows.Close()
 	for rows.Next() {
 		var payment Payment
 
@@ -92,6 +92,7 @@ func (db *DB) GetPayment(preimageHash string) (result Payment, err error) {
 		log.Fatalf("Error retrieving payment: %v", err)
 		return
 	}
+	defer rows.Close()
 	if rows.Next() {
 		if err = rows.StructScan(&result); err != nil {
 			log.Fatalf("Error mapping payment: %v", err)

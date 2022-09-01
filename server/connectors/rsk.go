@@ -218,7 +218,7 @@ func poolSubscription(sub ethereum.Subscription, logs chan gethTypes.Log, callba
 				log.Debugln(vLog) // pointer to event log
 				log.Error("Event received but no callback declared.")
 			} else {
-				go callback(vLog)
+				callback(vLog)
 			}
 		}
 	}
