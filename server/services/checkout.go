@@ -2,8 +2,10 @@ package services
 
 import (
 	"github.com/btcsuite/btcutil"
+	"github.com/patogallaiov/boltz-poc/config"
 	"github.com/patogallaiov/boltz-poc/connectors"
 	"github.com/patogallaiov/boltz-poc/storage"
+	log "github.com/sirupsen/logrus"
 )
 
 type Invoice struct {
@@ -15,7 +17,7 @@ type CheckoutService struct {
 	db    storage.DBConnector
 }
 
-func NewCheckoutService(boltz connectors.BoltzConnector, db storage.DBConnector) *CheckoutService {
+func NewCheckoutService(appCfg config.Config, boltz connectors.BoltzConnector, db storage.DBConnector) *CheckoutService {
 	return &CheckoutService{
 		boltz,
 		db,
@@ -23,7 +25,20 @@ func NewCheckoutService(boltz connectors.BoltzConnector, db storage.DBConnector)
 }
 
 func (service *CheckoutService) CreateInvoice(request storage.PaymentRequest) (*Invoice, error) {
-	response, err := service.boltz.NewReverseSwap("BTC/rBTC", "sell", btcutil.Amount(request.Amount), "", nil)
+	swaptype, err := service.db.GetConfig("swaptype")
+	if err != nil {
+		return &Invoice{}, err
+	}
+	log.Debug("Swap type config:", swaptype.Value)
+	pair := "BTC/rBTC"
+	switch swaptype.Value {
+	case "liquidity":
+		pair = "BTC/DOC"
+	case "mint", "default":
+		pair = "BTC/rBTC"
+	}
+
+	response, err := service.boltz.NewReverseSwap(pair, "sell", btcutil.Amount(request.Amount), "", nil)
 	if err != nil {
 		return &Invoice{}, err
 	}

@@ -13,6 +13,8 @@ type Payment struct {
 	Preimage     string `db:"Preimage"`
 	Invoice      string `db:"Invoice"`
 	Amount       int    `db:"Amount"`
+	Status       string `db:"Status"`
+	Tx           string `db:"Status"`
 }
 
 type PaymentRequest struct {
@@ -24,7 +26,9 @@ CREATE TABLE IF NOT EXISTS payment (
 	PreimageHash TEXT PRIMARY KEY,
 	Preimage TEXT,
 	Invoice TEXT,
-	Amount TEXT
+	Amount NUMBER,
+	Status TEXT,
+	Tx TEXT
 )
 `
 
@@ -33,15 +37,24 @@ INSERT INTO payment (
     PreimageHash,
 	Preimage,
 	Invoice,
-	Amount
+	Amount,
+	Status,
+	Tx
 )
 VALUES (
     :PreimageHash,
 	:Preimage,
 	:Invoice,
-	:Amount
+	:Amount,
+	:Status,
+	:Tx
 )
 `
+
+const updatePayments = `
+UPDATE payment SET  Status = :Status,
+					Tx = :Tx
+Where PreimageHash = :PreimageHash`
 
 const getPayments = `
 SELECT *
@@ -54,14 +67,26 @@ WHERE PreimageHash = ?
 LIMIT 1`
 
 func (db *DB) SavePayment(payment *Payment) error {
-	log.Debug("inserting payment{", payment.PreimageHash, "}", ": ", payment)
-	query, args, _ := sqlx.Named(insertPayment, payment)
-	result, err := db.db.Exec(query, args...)
+	exist, err := db.GetPayment(payment.PreimageHash)
 	if err != nil {
-		log.Error("Error inserting payment", err)
+		log.Error("Error saving payment", err)
 		return err
 	}
-	log.Debug("success inserting payment", result)
+	var queryString string
+	if (exist != Payment{}) {
+		log.Debug("updating payment{", payment.PreimageHash, "}", ": ", payment)
+		queryString = updatePayments
+	} else {
+		log.Debug("inserting payment{", payment.PreimageHash, "}", ": ", payment)
+		queryString = insertPayment
+	}
+	query, args, _ := sqlx.Named(queryString, payment)
+	result, err := db.db.Exec(query, args...)
+	if err != nil {
+		log.Error("Error saving payment", err)
+		return err
+	}
+	log.Debug("success saving payment", result)
 	return nil
 }
 

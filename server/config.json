@@ -17,8 +17,7 @@
         "chainId": 33
     },
     "boltz": {
-        "endpoint": "http://localhost:9001",
-        "abiPath": "/abi/EtherSwap.json"
+        "endpoint": "http://localhost:9001"
     },
     "accounts": {
         "rsk": {

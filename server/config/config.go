@@ -18,8 +18,9 @@ type Config struct {
 		ChainId  *big.Int
 	}
 	Boltz struct {
-		Endpoint string
-		AbiPath  string
+		Endpoint     string
+		AbiPath      string
+		ERC20AbiPath string
 	}
 	Accounts struct {
 		RSK struct {

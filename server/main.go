@@ -78,6 +78,7 @@ func main() {
 	if err != nil {
 		log.Fatal("error connecting to DB: ", err)
 	}
+	db.SetDefaultConfig()
 
 	// INIT RSK
 	rsk, err := connectors.NewRSK(cfg.Accounts.RSK.PrivateKey)
@@ -104,7 +105,7 @@ func main() {
 	log.Debugln("Initialized Boltz client.")
 
 	// INIT Checkout
-	checkout := services.NewCheckoutService(boltz, db)
+	checkout := services.NewCheckoutService(cfg, boltz, db)
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)

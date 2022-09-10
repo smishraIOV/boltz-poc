@@ -1,5 +1,11 @@
 package connectors
 
+import (
+	"math/big"
+
+	"github.com/ethereum/go-ethereum/common"
+)
+
 type BadRequestError string
 
 func (e *BadRequestError) Error() string {
@@ -106,4 +112,10 @@ type transactionStatus struct {
 
 type transactionRequest struct {
 	ID string `json:"id"`
+}
+
+type lockupEvent struct {
+	Amount       *big.Int
+	ClaimAddress common.Address
+	Timelock     *big.Int
 }

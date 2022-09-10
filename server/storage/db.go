@@ -16,6 +16,10 @@ type DBConnector interface {
 	SavePayment(payment *Payment) error
 	GetPayments() (result []*Payment, err error)
 	GetPayment(preimageHash string) (result Payment, err error)
+	SaveConfig(config *Config) error
+	GetConfigs() (result []*Config, err error)
+	GetConfig(key string) (result Config, err error)
+	SetDefaultConfig() error
 }
 
 type DB struct {
@@ -37,7 +41,12 @@ func Connect(dbPath string) (*DB, error) {
 		return nil, err
 	}
 
-	return &DB{db}, nil
+	if _, err := db.Exec(createConfigTable); err != nil {
+		return nil, err
+	}
+
+	result := &DB{db}
+	return result, nil
 }
 
 func (db *DB) Close() error {
