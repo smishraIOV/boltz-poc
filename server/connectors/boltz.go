@@ -117,6 +117,7 @@ func (boltz *Boltz) receiveEvent(elog gethTypes.Log) {
 
 	switch elog.Topics[0].Hex() {
 	case lockupEvent.Hex():
+		//These fields are a subset of AbiLockup struct in EtherSwap.go
 		event := struct {
 			Amount       *big.Int
 			ClaimAddress common.Address
@@ -162,7 +163,9 @@ func (boltz *Boltz) receiveEvent(elog gethTypes.Log) {
 		}
 		log.Debugf("Claiming auth.From: %s", auth.From)
 		//auth.NoSend = true
-		result, err := swapContract.AbiTransactor.Claim(auth, preimage, event.Amount, common.HexToAddress(refundAddress), event.Timelock)
+		// todo(shree): this is where we diverge .. start using claimviaDocmint
+		// where is the gaslimit set (only in ../rsk.go?)
+		result, err := swapContract.AbiTransactor.ClaimDoCViaMint(auth, preimage, event.Amount, common.HexToAddress(refundAddress), event.Timelock, new(big.Int).Div(event.Amount, big.NewInt(2)), event.ClaimAddress, event.ClaimAddress)
 		if err != nil {
 			log.Fatalf("Error executing claim tx: %v", err)
 			return

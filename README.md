@@ -9,7 +9,7 @@
 
 
 # 1. Setup environment
-- Run: `npm run docker:volumes:reset`
+- Run: `npm run docker:reset`
 - Run: `npm run docker:start`
 
 # 2. Start server
