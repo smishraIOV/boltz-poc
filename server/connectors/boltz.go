@@ -142,10 +142,11 @@ func (boltz *Boltz) receiveEvent(elog gethTypes.Log) {
 		refundAddress := elog.Topics[2].Hex()
 		log.Debugf("Lockup event decoded: %v", event)
 		log.Debugf("Claiming payment.Preimage: %s", payment.Preimage)
-		log.Debugf("Claiming refundAddress: %s", refundAddress)
+		//log.Debugf("Claiming refundAddress: %s",  common.HexToAddress(refundAddress))
 		log.Debugf("Claiming preimageHash: %s", preimageHash)
 		log.Debugf("Claiming event.Timelock: %s", event.Timelock)
-		log.Debugf("Claiming event.Amount: %s", event.Amount)
+		log.Debugf("Claiming event.Amount (in wei RBTC): %s", event.Amount)
+		log.Debugf("Requesting DOC minting amount (in wei RBTC): %s",new(big.Int).Div(event.Amount, big.NewInt(2)))
 		log.Debugf("Claiming elog.Topics[0].Hex(): %s", elog.Topics[0].Hex())
 		log.Debugf("Claiming elog.Topics[1].Hex(): %s", elog.Topics[1].Hex())
 		log.Debugf("Claiming elog.Topics[2].Hex(): %s", elog.Topics[2].Hex())
@@ -162,10 +163,9 @@ func (boltz *Boltz) receiveEvent(elog gethTypes.Log) {
 			return
 		}
 		log.Debugf("Claiming auth.From: %s", auth.From)
-		//auth.NoSend = true
 		// todo(shree): this is where we diverge .. start using claimviaDocmint
 		// where is the gaslimit set (only in ../rsk.go?)
-		result, err := swapContract.AbiTransactor.ClaimDoCViaMint(auth, preimage, event.Amount, common.HexToAddress(refundAddress), event.Timelock, new(big.Int).Div(event.Amount, big.NewInt(2)), event.ClaimAddress, event.ClaimAddress)
+		result, err := swapContract.AbiTransactor.ClaimDoCViaMint(auth, preimage, event.Amount , common.HexToAddress(refundAddress), event.Timelock, new(big.Int).Div(event.Amount, big.NewInt(2)), event.ClaimAddress, event.ClaimAddress)
 		if err != nil {
 			log.Fatalf("Error executing claim tx: %v", err)
 			return
