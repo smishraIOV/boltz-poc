@@ -1,7 +1,7 @@
 version: '3.3'
 services:
   boltz-backend:
-    image: boltz/backend:latest
+    image: boltz/backend:testnet
     container_name: boltz-backend
     environment:
       USERID: ${USERID:-1000}
@@ -21,12 +21,12 @@ services:
       boltz-backend-setup:
         condition: service_healthy
   boltz-backend-setup:
-    image: boltz/backend:latest
+    image: boltz/backend:testnet
     container_name: boltz-backend-SETUP
     restart: "no"
     depends_on:
-      rskj:
-        condition: service_healthy
+  #    rskj:
+  #      condition: service_healthy
       alice:
         condition: service_started
       bob:
@@ -44,14 +44,14 @@ services:
       - ./data/boltz-backend/home/otpSecret.dat:/root/.boltz/otpSecret.dat
       - ./data/boltz-backend/home/otpUri.txt:/root/.boltz/otpUri.txt
       - ./data/boltz-backend/home/seed.dat:/root/.boltz/seed.dat
-    entrypoint: [ "bash", "-c", "cd /boltz-backend && npm run docker:rskj:deploy && /boltz-backend/bin/boltz-ethereum send 1000000000000 '0xABf0E4a3aB8628CAC2D0539679233B607c3c6f42' --provider http://host.docker.internal:4444 && /boltz-backend/bin/boltz-ethereum send 1000000000000 '0xABf0E4a3aB8628CAC2D0539679233B607c3c6f42' --token --provider http://host.docker.internal:4444 && sleep infinity"]
-  rskj:
-    image: rskj:latest
-    container_name: RSK-Node
-    ports:
-      - '4444:4444'
-      - '4445:4445'
-    volumes:
-      - ./data/rskj/database:/root/.rsk/regtest/database
-      - ./data/rskj/local/node.conf:/usr/local/rskj/node.conf
-      - ./data/rskj/local/logback.xml:/usr/local/rskj/logback.xml
+    entrypoint: [ "bash", "-c", "cd /boltz-backend && /boltz-backend/bin/boltz-ethereum send 1000000000000 '0xABf0E4a3aB8628CAC2D0539679233B607c3c6f42' --provider http://host.docker.internal:4444 && /boltz-backend/bin/boltz-ethereum send 1000000000000 '0xABf0E4a3aB8628CAC2D0539679233B607c3c6f42' --token --provider http://host.docker.internal:4444 && sleep infinity"]
+  #rskj:
+  #  image: rskj:latest
+  #  container_name: RSK-Node
+  #  ports:
+  #    - '4444:4444'
+  #    - '4445:4445'
+  #  volumes:
+  #    - ./data/rskj/database:/root/.rsk/regtest/database
+  #    - ./data/rskj/local/node.conf:/usr/local/rskj/node.conf
+  #    - ./data/rskj/local/logback.xml:/usr/local/rskj/logback.xml

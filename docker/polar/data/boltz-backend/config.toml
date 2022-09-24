@@ -39,7 +39,7 @@ minSwapAmount = 1
 maxZeroConfAmount = 10_000_000
 
   [currencies.chain]
-  host = "host.docker.internal"
+  host = "localhost"
   port = 18_445
   cookie = "/boltz-backend/nodes/btc/.bitcoin-cookie"
   rpcuser = "polaruser"
@@ -57,9 +57,13 @@ maxZeroConfAmount = 10_000_000
 [ethereum]
 providerEndpoint = "http://host.docker.internal:4444"
 
-# these addresses are from initial boton deployment
-etherSwapAddress = "0xE0825f57Dd05Ef62FF731c27222A86E104CC4Cad"
-erc20SwapAddress = "0x83C5541A6c8D2dBAD642f385d8d06Ca9B6C731ee"
+# these regtest addresses are after new order of deployment (own Boltz-core with 4 contracts)
+#etherSwapAddress = "0xE0825f57Dd05Ef62FF731c27222A86E104CC4Cad"
+#erc20SwapAddress = "0x83C5541A6c8D2dBAD642f385d8d06Ca9B6C731ee"
+
+# these are RSK testnet addresses 
+etherSwapAddress = "0xEc43aEfb58dbf5b597d8b60D8012e09484Ce13a7"
+erc20SwapAddress = "0x75a7113C92E84a4A65722DDeE6a66DF086388081"
 
   [[ethereum.tokens]]
   symbol = "rBTC"
@@ -67,14 +71,16 @@ erc20SwapAddress = "0x83C5541A6c8D2dBAD642f385d8d06Ca9B6C731ee"
   maxSwapAmount = 4_294_96700
   minSwapAmount = 1
 
-  # todo(shree) switch this to DOC (using testERC20 not DummyDocMint)
+  # todo(shree) currently using testERC20 (not mintable DummyDocMint)
   # for regtest mode, use address of ERC20 token address (boton)
   [[ethereum.tokens]]
   symbol = "DOC"
   decimals = 18
-  contractAddress = "0xDA7Ce79725418F4F6E13Bf5F520C89Cec5f6A974"
+  # this is regtest (testERC20 for "liquidity" approach, not mintable DOC)
+  #contractAddress = "0xDA7Ce79725418F4F6E13Bf5F520C89Cec5f6A974"
+  
+  # RSK testnet use DOC address for "liquidity" approach
+  contractAddress = "0xCB46c0ddc60D18eFEB0E586C17Af6ea36452Dae0"
 
   maxSwapAmount = 4_294_96700000
   minSwapAmount = 10000
-
-
