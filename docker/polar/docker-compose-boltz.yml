@@ -44,7 +44,7 @@ services:
       - ./data/boltz-backend/home/otpSecret.dat:/root/.boltz/otpSecret.dat
       - ./data/boltz-backend/home/otpUri.txt:/root/.boltz/otpUri.txt
       - ./data/boltz-backend/home/seed.dat:/root/.boltz/seed.dat
-    entrypoint: [ "bash", "-c", "cd /boltz-backend && /boltz-backend/bin/boltz-ethereum send 1000000000000 '0xABf0E4a3aB8628CAC2D0539679233B607c3c6f42' --provider http://host.docker.internal:4444 && /boltz-backend/bin/boltz-ethereum send 1000000000000 '0xABf0E4a3aB8628CAC2D0539679233B607c3c6f42' --token --provider http://host.docker.internal:4444 && sleep infinity"]
+    entrypoint: [ "bash", "-c", "cd /boltz-backend && /boltz-backend/bin/boltz-ethereum send 10000 '0x20f51908c8ce306ee805abea650c2f23a1148908' --provider http://host.docker.internal:4444 && /boltz-backend/bin/boltz-ethereum send 100 '0x20f51908c8ce306ee805abea650c2f23a1148908' --token --provider http://host.docker.internal:4444 && sleep infinity"]
   #rskj:
   #  image: rskj:latest
   #  container_name: RSK-Node

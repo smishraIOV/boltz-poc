@@ -14,7 +14,7 @@
     },
     "rsk": {
         "endpoint": "ws://localhost:4445/websocket",
-        "chainId": 33
+        "chainId": 31
     },
     "boltz": {
         "endpoint": "http://localhost:9001",
