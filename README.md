@@ -1,4 +1,5 @@
-# boltz-poc
+# Boltz PoC
+# WARNING: The applications themselves are not production ready. The apps and tools in this repo are solely for demo and experimenting.
 
 # 0. Requirements
 
